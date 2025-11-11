@@ -13,6 +13,12 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
   int _steps = 0;
+  double _distance = 0.0;
+  double _calories = 0.0;
+  int _elapsedSeconds = 0;
+  Timer? _timer;
+  bool _isTimerActive = false;
+
   bool _isSimulationMode = false;
   double _simulationSpeed = 5.0;
   
@@ -20,16 +26,6 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
   double _previousAnimationValue = 0.0;
 
   StreamSubscription<StepCount>? _stepCountSubscription;
-
-  void _onAnimationUpdate() {
-    if (!_isSimulationMode || !_animationController.isAnimating) return;
-    final currentValue = _animationController.value;
-    if ((_previousAnimationValue < 0.5 && currentValue >= 0.5) ||
-        (_previousAnimationValue > 0.5 && currentValue < 0.5)) {
-      setState(() { _steps++; });
-    }
-    _previousAnimationValue = currentValue;
-  }
 
   @override
   void initState() {
@@ -40,6 +36,35 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     );
     _animationController.addListener(_onAnimationUpdate);
     initPedometer();
+    _startTimer(); // Timer is initialized but will only run when _isTimerActive is true
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted && _isTimerActive) {
+        setState(() {
+          _elapsedSeconds++;
+        });
+      }
+    });
+  }
+
+  void _updateMetrics(int steps) {
+    _steps = steps;
+    _distance = steps * 0.762; // Average stride length: 0.762 meters
+    _calories = steps * 0.04; // Average calories burned per step: 0.04
+  }
+
+  void _onAnimationUpdate() {
+    if (!_isSimulationMode || !_animationController.isAnimating) return;
+    final currentValue = _animationController.value;
+    if ((_previousAnimationValue < 0.5 && currentValue >= 0.5) ||
+        (_previousAnimationValue > 0.5 && currentValue < 0.5)) {
+      setState(() { 
+        _updateMetrics(_steps + 1);
+      });
+    }
+    _previousAnimationValue = currentValue;
   }
 
   void initPedometer() {
@@ -51,11 +76,15 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
   }
   
   void _onStepCount(StepCount event) {
+    if (mounted && !_isTimerActive) {
+      setState(() { _isTimerActive = true; });
+    }
+
     if (!_animationController.isAnimating) {
       _animationController.repeat(reverse: true);
     }
     setState(() {
-      _steps = event.steps;
+      _updateMetrics(event.steps);
     });
   }
 
@@ -72,7 +101,9 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
   void _toggleSimulationMode(bool value) {
     setState(() {
       _isSimulationMode = value;
-      _steps = 0;
+      _updateMetrics(0);
+      _elapsedSeconds = 0;
+      _isTimerActive = false;
       _previousAnimationValue = 0.0;
       _animationController.stop();
       _animationController.reset();
@@ -88,12 +119,14 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
 
   void _startSimulation() {
     if (_isSimulationMode && !_animationController.isAnimating) {
+      setState(() { _isTimerActive = true; });
       _animationController.repeat(reverse: true);
     }
   }
 
   void _stopSimulation() {
     if (_animationController.isAnimating) {
+      setState(() { _isTimerActive = false; });
       _animationController.stop();
     }
   }
@@ -112,7 +145,17 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     _stepCountSubscription?.cancel();
     _animationController.removeListener(_onAnimationUpdate);
     _animationController.dispose();
+    _timer?.cancel();
     super.dispose();
+  }
+
+  String _formatDuration(int totalSeconds) {
+    final duration = Duration(seconds: totalSeconds);
+    String twoDigits(int n) => n.toString().padLeft(2, "0");
+    final hours = twoDigits(duration.inHours);
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    return "$hours:$minutes:$seconds";
   }
 
   @override
@@ -166,6 +209,8 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
                 '$_steps',
                 style: const TextStyle(fontSize: 60, fontWeight: FontWeight.bold),
               ),
+              const SizedBox(height: 30),
+              _buildStatsRow(),
               const SizedBox(height: 40),
               if (_isSimulationMode)
                 _buildSimulationControls(),
@@ -174,6 +219,28 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildStatsRow() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      children: [
+        _buildStatItem(Icons.location_on, '${(_distance / 1000).toStringAsFixed(2)}', 'km'),
+        _buildStatItem(Icons.timer, _formatDuration(_elapsedSeconds), 'Time'),
+        _buildStatItem(Icons.local_fire_department, '${_calories.toStringAsFixed(1)}', 'kcal'),
+      ],
+    );
+  }
+
+  Widget _buildStatItem(IconData icon, String value, String unit) {
+    return Column(
+      children: [
+        Icon(icon, color: Theme.of(context).primaryColor, size: 30),
+        const SizedBox(height: 8),
+        Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+        Text(unit, style: const TextStyle(fontSize: 14, color: Colors.grey)),
+      ],
     );
   }
 

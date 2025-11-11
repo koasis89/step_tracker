@@ -2,36 +2,51 @@
 
 ## Overview
 
-This document outlines the design and functionality of a Pedometer application built with Flutter. The app focuses on one core feature: tracking user steps. It supports both real-time step counting using the device's hardware sensors and a simulation mode for testing and demonstration purposes.
+This document outlines the design and functionality of a Pedometer application built with Flutter. The app tracks user steps, distance, calories burned, and active time. It supports both real-time data from hardware sensors and a simulation mode for demonstration.
 
 ## Features
 
 *   **Real-time Step Tracking (Live Mode):**
-    *   Utilizes the `pedometer` package to receive step count data from the device's hardware step sensor in real-time.
-    *   Provides a live count of the user's steps.
+    *   Utilizes the `pedometer` package for live step count data from the device's sensor.
+    *   Displays a real-time count of the user's steps.
+
+*   **Key Health Metrics:**
+    *   **Distance:** Calculates and displays the total distance covered in kilometers, estimated from the step count.
+    *   **Calories Burned:** Shows an estimated number of calories burned (kcal) based on the step count.
+    *   **Active Time:** A timer tracks and displays the total duration of the activity in HH:MM:SS format. The timer starts only when the first step is detected (in Live Mode) or when the simulation is started.
 
 *   **Simulation Mode:**
-    *   A feature designed for testing the app's functionality without relying on a physical sensor.
-    *   **Activation:** Users can toggle between Live Mode and Simulation Mode at any time using a switch in the app bar.
-    *   **Manual Control:** Provides "Start" and "Stop" buttons to manually control the simulation.
-    *   **Speed Adjustment:** A slider allows the user to adjust the simulation speed (from 1 to 10), which dictates the rate of step increase.
+    *   A feature for testing and demonstration without a physical sensor.
+    *   **Activation:** Users can toggle between Live and Simulation Mode via a switch in the app bar. All metrics reset when switching modes.
+    *   **Manual Control:** Provides "Start" and "Stop" buttons to control the simulation. The timer starts and pauses accordingly.
+    *   **Speed Adjustment:** A slider allows adjusting the simulation speed, which dictates the rate of step increase.
 
 *   **UI and User Experience:**
-    *   **Walking Animation:** A custom-painted animation provides a visual representation of walking, which is active when steps are being counted (in both live and simulation modes).
-    *   **Clear Display:** The current step count is displayed prominently on the screen.
-    *   **Simple Interface:** The application has a single, focused screen, making it intuitive and easy to use.
+    *   **Walking Animation:** A custom-painted animation visually represents walking, active when steps are counted.
+    *   **Clear Display:** The current step count is the main focus, with distance, time, and calories displayed clearly below it.
+    *   **Simple Interface:** A single, focused screen makes the app intuitive and easy to use.
 
 ## Implementation History
 
 1.  **Core Pedometer Setup:**
-    *   Added the `pedometer` package to the project.
-    *   Built the basic UI to display the step count received from the sensor.
+    *   Added the `pedometer` package.
+    *   Built the basic UI to display the step count.
 
 2.  **Simulation Feature:**
-    *   Implemented the UI for simulation mode, including the toggle switch, start/stop buttons, and speed slider.
-    *   Created the logic to animate a walking figure and increment the step count based on the simulation speed and state.
+    *   Implemented the UI for simulation mode (toggle switch, start/stop buttons, speed slider).
+    *   Created the logic to animate a walking figure and increment steps based on simulation settings.
 
 3.  **UI Refinement & Simplification:**
-    *   A custom painter (`DetailedWalkingPainter`) was created for a more visually appealing walking animation.
-    *   The project was refactored to focus solely on the pedometer functionality. All previous features related to user authentication, data persistence with Firebase, and tab-based navigation were removed to simplify the codebase and enhance maintainability.
-    *   The code structure was reorganized into a clean architecture with a single main screen (`lib/screens/main_screen.dart`) containing all the necessary logic.
+    *   Created `DetailedWalkingPainter` for a more appealing walking animation.
+    *   Refactored the project to focus solely on pedometer functionality, removing Firebase authentication, data persistence, and tab-based navigation.
+    *   Reorganized the code into a clean, single-screen architecture in `lib/screens/main_screen.dart`.
+
+4.  **Health Metrics Expansion:**
+    *   Added state variables and logic to track and calculate distance (km), calories (kcal), and elapsed active time.
+    *   Implemented a `Timer` to track session duration.
+    *   Updated the UI to display the new metrics (distance, time, calories) with corresponding icons in a clean, organized row.
+    *   Ensured all metrics reset correctly when switching between live and simulation modes.
+
+5.  **Improved Timer Logic:**
+    *   Modified the timer to activate only when activity is detected (first step in Live Mode, or 'Start' pressed in Simulation Mode).
+    *   The timer now pauses when the simulation is stopped, providing a more accurate measure of active time.
