@@ -1,365 +1,44 @@
 
-import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:pedometer/pedometer.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:myapp/widgets/detailed_walking_painter.dart';
+import 'package:provider/provider.dart';
+import 'package:myapp/main.dart';
+import 'package:myapp/screens/live_screen.dart';
+import 'package:myapp/screens/simulation_screen.dart';
 
-class MainScreen extends StatefulWidget {
+class MainScreen extends StatelessWidget {
   const MainScreen({super.key});
 
   @override
-  State<MainScreen> createState() => _MainScreenState();
-}
-
-class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
-  int _steps = 0;
-  double _distance = 0.0;
-  double _calories = 0.0;
-  int _elapsedSeconds = 0;
-  Timer? _timer;
-  bool _isTimerActive = false;
-
-  bool _isSimulationMode = false;
-  double _simulationSpeed = 5.0;
-
-  late AnimationController _animationController;
-  double _previousAnimationValue = 0.0;
-
-  StreamSubscription<StepCount>? _stepCountSubscription;
-  StreamSubscription<Position>? _positionSubscription;
-  Position? _lastPosition;
-  Timer? _movementStopTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1020),
-    );
-    _animationController.addListener(_onAnimationUpdate);
-    _startTimer();
-    _setupMode(isSimulation: _isSimulationMode);
-  }
-
-  void _setupMode({required bool isSimulation}) {
-    if (isSimulation) {
-      _stopPositionTracking();
-      _stepCountSubscription?.cancel();
-      _updateAnimationDuration();
-    } else {
-      _animationController.stop();
-      initPedometer();
-      _startPositionTracking();
-    }
-  }
-
-  void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted && _isTimerActive) {
-        setState(() {
-          _elapsedSeconds++;
-        });
-      }
-    });
-  }
-
-  void _updateMetrics(int steps) {
-    _steps = steps;
-    _distance = steps * 0.762; // Average stride length
-    _calories = steps * 0.04; // Average calories per step
-  }
-
-  void _onAnimationUpdate() {
-    if (!_isSimulationMode || !_animationController.isAnimating) return;
-    final currentValue = _animationController.value;
-    if ((_previousAnimationValue < 0.5 && currentValue >= 0.5) ||
-        (_previousAnimationValue > 0.5 && currentValue < 0.5)) {
-      setState(() {
-        _updateMetrics(_steps + 1);
-      });
-    }
-    _previousAnimationValue = currentValue;
-  }
-
-  void initPedometer() {
-    _stepCountSubscription = Pedometer.stepCountStream.listen(
-      _onStepCount,
-      onError: _onStepCountError,
-    );
-  }
-
-  void _onStepCount(StepCount event) {
-    _handleMovement();
-    if (!_animationController.isAnimating) {
-      _animationController.repeat(reverse: true);
-    }
-    setState(() {
-      _updateMetrics(event.steps);
-    });
-  }
-
-  void _onStepCountError(error) {
-    print('Pedometer Error: $error');
-    if (mounted && !_isSimulationMode) {
-      setState(() {
-        print("Sensor not found, switching to simulation mode");
-        _toggleSimulationMode(true);
-      });
-    }
-  }
-
-  void _startPositionTracking() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      print('Location services are disabled.');
-      return;
-    }
-
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        print('Location permissions are denied');
-        return;
-      }
-    }
-
-    if (permission == LocationPermission.deniedForever) {
-      print('Location permissions are permanently denied, we cannot request permissions.');
-      return;
-    }
-
-    _positionSubscription = Geolocator.getPositionStream().listen((Position position) {
-      if (_lastPosition != null) {
-        final distance = Geolocator.distanceBetween(
-          _lastPosition!.latitude, _lastPosition!.longitude,
-          position.latitude, position.longitude
-        );
-        // If moved more than a meter, consider it as movement
-        if (distance > 1) {
-          _handleMovement();
-        }
-      }
-      _lastPosition = position;
-    });
-  }
-
-  void _stopPositionTracking() {
-    _positionSubscription?.cancel();
-    _movementStopTimer?.cancel();
-  }
-
-  void _handleMovement() {
-    if (mounted && !_isTimerActive) {
-      setState(() { _isTimerActive = true; });
-    }
-    _movementStopTimer?.cancel();
-    _movementStopTimer = Timer(const Duration(seconds: 5), () {
-      if (mounted) {
-        setState(() { _isTimerActive = false; });
-      }
-    });
-  }
-
-  void _toggleSimulationMode(bool value) {
-    setState(() {
-      _isSimulationMode = value;
-      _updateMetrics(0);
-      _elapsedSeconds = 0;
-      _isTimerActive = false;
-      _previousAnimationValue = 0.0;
-      _animationController.stop();
-      _animationController.reset();
-      _movementStopTimer?.cancel();
-      _setupMode(isSimulation: value);
-    });
-  }
-
-  void _startSimulation() {
-    if (_isSimulationMode && !_animationController.isAnimating) {
-      setState(() { _isTimerActive = true; });
-      _animationController.repeat(reverse: true);
-    }
-  }
-
-  void _stopSimulation() {
-    if (_animationController.isAnimating) {
-      setState(() { _isTimerActive = false; });
-      _animationController.stop();
-    }
-  }
-
-  void _updateAnimationDuration() {
-    final durationMs = (1620 - (_simulationSpeed * 120)) / 2;
-    _animationController.duration = Duration(milliseconds: durationMs.toInt());
-    if (_animationController.isAnimating) {
-      _animationController.repeat(reverse: true);
-    }
-  }
-
-  @override
-  void dispose() {
-    _stepCountSubscription?.cancel();
-    _animationController.removeListener(_onAnimationUpdate);
-    _animationController.dispose();
-    _timer?.cancel();
-    _stopPositionTracking();
-    super.dispose();
-  }
-  
-  String _formatDuration(int totalSeconds) {
-    final duration = Duration(seconds: totalSeconds);
-    String twoDigits(int n) => n.toString().padLeft(2, "0");
-    final hours = twoDigits(duration.inHours);
-    final minutes = twoDigits(duration.inMinutes.remainder(60));
-    final seconds = twoDigits(duration.inSeconds.remainder(60));
-    return "$hours:$minutes:$seconds";
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final appMode = context.watch<AppModeProvider>();
+    final isSimulation = appMode.isSimulationMode;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Pedometer App'),
+        // AppBar의 스타일은 이제 main.dart의 테마를 따르므로
+        // backgroundColor와 elevation 속성을 여기서 지정할 필요가 없습니다.
+        title: Text(isSimulation ? 'Simulation Mode' : 'Live Mode'),
         actions: [
-          Row(
-            children: [
-              const Text('Simulate'),
-              Switch(
-                value: _isSimulationMode,
-                onChanged: _toggleSimulationMode,
-              ),
-              const SizedBox(width: 10),
-            ],
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: Row(
+              children: [
+                Icon(isSimulation ? Icons.smart_toy_outlined : Icons.sensors, size: 20, color: Colors.white70),
+                const SizedBox(width: 8),
+                Switch(
+                  value: isSimulation,
+                  onChanged: (value) {
+                    context.read<AppModeProvider>().toggleMode();
+                  },
+                  // Switch의 스타일 관련 코드(thumbColor, trackColor)는
+                  // 이제 main.dart의 테마에서 중앙 관리되므로 여기서 모두 삭제합니다.
+                ),
+              ],
+            ),
           ),
         ],
       ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              const SizedBox(height: 20),
-              Text(
-                _isSimulationMode ? 'Simulation Mode' : 'Live Mode',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w500,
-                  color: _isSimulationMode ? Colors.orange : Colors.green,
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                height: 250,
-                width: 200,
-                child: CustomPaint(
-                  size: const Size(200, 250),
-                  painter: DetailedWalkingPainter(animation: _animationController),
-                ),
-              ),
-              const SizedBox(height: 30),
-              const Text(
-                'Steps Taken',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w500),
-              ),
-              Text(
-                '$_steps',
-                style: const TextStyle(fontSize: 60, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 30),
-              _buildStatsRow(),
-              const SizedBox(height: 40),
-              if (_isSimulationMode)
-                _buildSimulationControls(),
-              const SizedBox(height: 20),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatsRow() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceAround,
-      children: [
-        _buildStatItem(Icons.location_on, '${(_distance / 1000).toStringAsFixed(2)}', 'km'),
-        _buildStatItem(Icons.timer, _formatDuration(_elapsedSeconds), 'Time'),
-        _buildStatItem(Icons.local_fire_department, '${_calories.toStringAsFixed(1)}', 'kcal'),
-      ],
-    );
-  }
-
-  Widget _buildStatItem(IconData icon, String value, String unit) {
-    return Column(
-      children: [
-        Icon(icon, color: Theme.of(context).primaryColor, size: 30),
-        const SizedBox(height: 8),
-        Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-        Text(unit, style: const TextStyle(fontSize: 14, color: Colors.grey)),
-      ],
-    );
-  }
-
-  Widget _buildSimulationControls() {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            ElevatedButton.icon(
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Start'),
-              onPressed: _startSimulation,
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green, 
-                  foregroundColor: Colors.white, 
-                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)),
-            ),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.stop),
-              label: const Text('Stop'),
-              onPressed: _stopSimulation,
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red, 
-                  foregroundColor: Colors.white, 
-                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('Slow'),
-              Expanded(
-                child: Slider(
-                  value: _simulationSpeed,
-                  min: 1,
-                  max: 10,
-                  divisions: 9,
-                  label: _simulationSpeed.round().toString(),
-                  onChanged: (newSpeed) {
-                    setState(() {
-                      _simulationSpeed = newSpeed;
-                      _updateAnimationDuration();
-                    });
-                  },
-                ),
-              ),
-              const Text('Fast'),
-            ],
-          ),
-        ),
-      ],
+      body: isSimulation ? const SimulationScreen() : const LiveScreen(),
     );
   }
 }

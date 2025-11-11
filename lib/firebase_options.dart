@@ -23,10 +23,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.android:
         return android;
       case TargetPlatform.iOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for ios - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return ios;
       case TargetPlatform.macOS:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for macos - '
@@ -66,4 +63,14 @@ class DefaultFirebaseOptions {
     projectId: 'steps-tracker-559c3',
     storageBucket: 'steps-tracker-559c3.firebasestorage.app',
   );
+
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyCZcPigMUVImuGPzdgxm2YsT0qTRwTSBVo',
+    appId: '1:339644828417:ios:278a48eabfef49187a6900',
+    messagingSenderId: '339644828417',
+    projectId: 'steps-tracker-559c3',
+    storageBucket: 'steps-tracker-559c3.firebasestorage.app',
+    iosBundleId: 'com.steps.myapp',
+  );
+
 }
