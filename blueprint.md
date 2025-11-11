@@ -1,65 +1,37 @@
-# 청사진: 만보기 앱
+# Blueprint: Pedometer App
 
-## 개요
+## Overview
 
-이 문서는 Flutter와 Firebase를 사용하여 사용자의 걸음 수를 추적하고, 인증 및 데이터 동기화 기능을 제공하는 만보기 앱의 설계와 기능을 기술합니다. 앱은 실시간 걸음 수 추적과 테스트를 위한 시뮬레이션 모드를 모두 지원합니다.
+This document outlines the design and functionality of a Pedometer application built with Flutter. The app focuses on one core feature: tracking user steps. It supports both real-time step counting using the device's hardware sensors and a simulation mode for testing and demonstration purposes.
 
-## 기능
+## Features
 
-*   **Firebase 기반 인증:**
-    *   이메일과 비밀번호를 사용한 신규 회원가입 및 기존 사용자 로그인 기능을 제공합니다.
-    *   `FirebaseAuth`를 통해 사용자의 인증 상태를 실시간으로 관리하며, 로그인/로그아웃 상태에 따라 적절한 화면(로그인 또는 메인)을 자동으로 표시합니다.
-    *   회원가입 시 `cloud_firestore`의 `users` 컬렉션에 사용자 정보(이메일, 가입일)를 저장합니다.
+*   **Real-time Step Tracking (Live Mode):**
+    *   Utilizes the `pedometer` package to receive step count data from the device's hardware step sensor in real-time.
+    *   Provides a live count of the user's steps.
 
-*   **실시간 걸음 수 추적 (Live Mode):**
-    *   `pedometer` 패키지를 활용하여 기기의 하드웨어 스텝 센서로부터 걸음 수 데이터를 실시간으로 수신합니다.
-    *   측정된 걸음 수는 `cloud_firestore`에 일자별로 저장되어, 앱을 재시작해도 데이터가 유지됩니다.
+*   **Simulation Mode:**
+    *   A feature designed for testing the app's functionality without relying on a physical sensor.
+    *   **Activation:** Users can toggle between Live Mode and Simulation Mode at any time using a switch in the app bar.
+    *   **Manual Control:** Provides "Start" and "Stop" buttons to manually control the simulation.
+    *   **Speed Adjustment:** A slider allows the user to adjust the simulation speed (from 1 to 10), which dictates the rate of step increase.
 
-*   **시뮬레이션 모드 (Simulation Mode):**
-    *   실제 센서 없이 앱의 걸음 수 관련 기능을 테스트하기 위한 모드입니다.
-    *   **활성화/비활성화:** 메인 화면의 스위치를 통해 언제든지 라이브 모드와 시뮬레이션 모드를 전환할 수 있습니다.
-    *   **Start/Stop 제어:** 사용자가 시뮬레이션의 시작과 중지를 수동으로 제어할 수 있습니다.
-    *   **속도 조절 (개선됨):**
-        *   1부터 10까지의 속도를 조절할 수 있는 슬라이더를 제공합니다.
-        *   속도 값(1-10)을 애니메이션 주기에 매핑하는 계산 로직을 개선하여, **낮은 속도(1-3)에서도 명확한 움직임을 보이고** 속도 변화가 전 구간에서 자연스럽게 느껴지도록 수정했습니다.
-        *   사용자가 슬라이더를 조작하는 즉시 새로운 속도가 애니메이션과 걸음 수 증가에 반영되어 즉각적인 피드백을 제공합니다.
+*   **UI and User Experience:**
+    *   **Walking Animation:** A custom-painted animation provides a visual representation of walking, which is active when steps are being counted (in both live and simulation modes).
+    *   **Clear Display:** The current step count is displayed prominently on the screen.
+    *   **Simple Interface:** The application has a single, focused screen, making it intuitive and easy to use.
 
-*   **Firestore 데이터 동기화:**
-    *   모든 걸음 수 데이터(라이브/시뮬레이션)는 `users/{userId}/daily_steps/{yyyy-mm-dd}` 형식의 문서에 저장됩니다.
-    *   이를 통해 사용자는 어느 기기에서 로그인하든 자신의 일일 걸음 수 기록을 확인할 수 있습니다.
+## Implementation History
 
-*   **UI 및 사용자 경험:**
-    *   **걷기 애니메이션:** 현재 걷고 있는 상태를 시각적으로 보여주는 커스텀 애니메이션을 표시합니다.
-    *   **탭 기반 네비게이션:** `Step`, `Stats`, `Events`, `Profile` 탭으로 구성된 `BottomNavigationBar`를 통해 앱의 주요 기능을 쉽게 탐색할 수 있습니다.
-    *   **프로필 정보 표시:** 프로필 탭에서 현재 로그인된 사용자의 이메일과 가입 날짜를 Firestore에서 가져와 표시합니다.
-    *   **로그아웃:** 프로필 탭의 로그아웃 버튼을 통해 안전하게 계정에서 로그아웃할 수 있습니다.
+1.  **Core Pedometer Setup:**
+    *   Added the `pedometer` package to the project.
+    *   Built the basic UI to display the step count received from the sensor.
 
-## 구현 계획 및 히스토리
+2.  **Simulation Feature:**
+    *   Implemented the UI for simulation mode, including the toggle switch, start/stop buttons, and speed slider.
+    *   Created the logic to animate a walking figure and increment the step count based on the simulation speed and state.
 
-1.  **기본 구조 설정:**
-    *   `pedometer` 패키지를 추가하고, 걸음 수를 표시하는 기본 UI를 구성했습니다.
-    *   시뮬레이션 모드의 기반(스위치, 버튼, 슬라이더)을 구현했습니다.
-
-2.  **Firebase 연동:**
-    *   `firebase_core`, `firebase_auth`, `cloud_firestore` 패키지를 추가했습니다.
-    *   `flutterfire configure`를 통해 Firebase 프로젝트를 앱에 연결했습니다.
-    *   로그인/회원가입 UI 및 `AuthWrapper`를 구현하여 인증 흐름을 완성했습니다.
-
-3.  **데이터 저장 로직 구현:**
-    *   실시간 및 시뮬레이션 걸음 수를 Firestore에 저장하고, 앱 시작 시 다시 불러오는 로직을 구현했습니다.
-    *   프로필 탭에 사용자 정보를 연동했습니다.
-
-4.  **UI/UX 개선:**
-    *   탭 바 네비게이션을 `AppBar`의 `TabBar`에서 `Scaffold`의 `BottomNavigationBar`로 변경하여 사용자 경험을 개선했습니다.
-    *   파일 구조를 `screens`, `tabs`, `widgets`로 재구성하여 코드의 가독성과 유지보수성을 높였습니다.
-5   **시뮬레이션 로직:**
-        *   **`_toggleSimulationMode`:** 모드를 전환하고 관련 상태를 초기화합니다.
-        *   **`_startSimulation`:** `_simulationSpeed`에 따라 걸음 수를 증가시키는 `Timer`를 시작하고, `_isSimulating`을 `true`로 설정합니다.
-        *   **`_stopSimulation`:** `Timer`를 중지하고 `_isSimulating`을 `false`로 설정합니다.
-        *   **`_changeSimulationSpeed`:** 슬라이더 값에 따라 `_simulationSpeed`를 업데이트하고, 시뮬레이션이 실행 중인 경우 타이머 간격을 조정합니다.
-    *   **UI 구현:**
-        *   `AppBar`에 시뮬레이션 모드 `Switch`를 유지합니다.
-        *   `_isSimulationMode`가 `true`일 때, 본문에 `Row` 위젯으로 Start/Stop 버튼과 `Slider`를 표시합니다.
-        *   버튼의 활성화 상태는 `_isSimulating` 값에 따라 동적으로 변경됩니다.
-6.  **버그 수정 및 기능 개선:**
-    *   **시뮬레이션 속도 조절 로직 수정:** 낮은 속도 구간에서 애니메이션이 멈춘 것처럼 보이던 문제를 해결하고, 슬라이더 조작에 즉각적으로 반응하도록 로직을 개선했습니다.
+3.  **UI Refinement & Simplification:**
+    *   A custom painter (`DetailedWalkingPainter`) was created for a more visually appealing walking animation.
+    *   The project was refactored to focus solely on the pedometer functionality. All previous features related to user authentication, data persistence with Firebase, and tab-based navigation were removed to simplify the codebase and enhance maintainability.
+    *   The code structure was reorganized into a clean architecture with a single main screen (`lib/screens/main_screen.dart`) containing all the necessary logic.

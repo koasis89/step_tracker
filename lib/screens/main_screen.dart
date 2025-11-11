@@ -1,11 +1,8 @@
 
 import 'dart:async';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:pedometer/pedometer.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../tabs/step_tab_page.dart';
-import '../tabs/profile_tab_page.dart';
+import 'package:myapp/widgets/detailed_walking_painter.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -14,236 +11,225 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-
-  int _currentIndex = 0;
-  StreamSubscription<StepCount>? _stepCountSubscription;
+class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
   int _steps = 0;
-
   bool _isSimulationMode = false;
-  double _simulationSpeed = 3.0;
-  Timer? _simulationTimer;
-
+  double _simulationSpeed = 5.0;
+  
   late AnimationController _animationController;
-  StreamSubscription<DocumentSnapshot>? _stepDataSubscription;
+  double _previousAnimationValue = 0.0;
+
+  StreamSubscription<StepCount>? _stepCountSubscription;
+
+  void _onAnimationUpdate() {
+    if (!_isSimulationMode || !_animationController.isAnimating) return;
+    final currentValue = _animationController.value;
+    if ((_previousAnimationValue < 0.5 && currentValue >= 0.5) ||
+        (_previousAnimationValue > 0.5 && currentValue < 0.5)) {
+      setState(() { _steps++; });
+    }
+    _previousAnimationValue = currentValue;
+  }
 
   @override
   void initState() {
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800), // Default duration
-    )..addStatusListener((status) {
-      // Make the animation loop back and forth for a natural walk cycle
-      if (status == AnimationStatus.completed) {
-        _animationController.reverse();
-      } else if (status == AnimationStatus.dismissed) {
-        _animationController.forward();
-      }
-    });
-
-    _setupPedometer();
+      duration: const Duration(milliseconds: 1020),
+    );
+    _animationController.addListener(_onAnimationUpdate);
+    initPedometer();
   }
 
-  @override
-  void dispose() {
-    _stepCountSubscription?.cancel();
-    _stepDataSubscription?.cancel();
-    _simulationTimer?.cancel();
-    _animationController.dispose();
-    super.dispose();
+  void initPedometer() {
+    if (_isSimulationMode) return;
+    _stepCountSubscription = Pedometer.stepCountStream.listen(
+      _onStepCount, 
+      onError: _onStepCountError
+    );
   }
-
-  void _setupPedometer() {
-    if (_isSimulationMode) {
-      _stepCountSubscription?.cancel();
-      _stepDataSubscription?.cancel();
-      _startSimulation();
-    } else {
-      _stopSimulation();
-      _stepCountStream = Pedometer.stepCountStream;
-      _stepCountSubscription = _stepCountStream.listen(_onStepCount, onError: _onStepCountError);
-      _listenToStepData();
-    }
-  }
-
-  void _listenToStepData() {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId == null) return;
-
-    final today = DateUtils.dateOnly(DateTime.now()).toIso8601String().substring(0, 10);
-
-    _stepDataSubscription?.cancel();
-    _stepDataSubscription = FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('daily_steps')
-        .doc(today)
-        .snapshots()
-        .listen((snapshot) {
-      if (mounted && snapshot.exists && !_isSimulationMode) {
-        final serverSteps = snapshot.data()?['steps'] ?? 0;
-        if (serverSteps != _steps) {
-            setState(() {
-                _steps = serverSteps;
-            });
-        }
-      }
-    });
-  }
-
-  Future<void> _updateSteps(int newSteps) async {
-    if (!mounted) return;
-
-    setState(() {
-      _steps = newSteps;
-    });
-
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId == null) return;
-
-    final today = DateUtils.dateOnly(DateTime.now()).toIso8601String().substring(0, 10);
-
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId)
-        .collection('daily_steps')
-        .doc(today)
-        .set({'steps': newSteps, 'date': Timestamp.now()});
-  }
-
+  
   void _onStepCount(StepCount event) {
-      _updateSteps(event.steps);
-      if (!_animationController.isAnimating) {
-          _animationController.forward();
-      }
+    if (!_animationController.isAnimating) {
+      _animationController.repeat(reverse: true);
+    }
+    setState(() {
+      _steps = event.steps;
+    });
   }
 
   void _onStepCountError(error) {
+    print('Pedometer Error: $error');
     if (mounted && !_isSimulationMode) {
-      _toggleSimulationMode(true);
+      setState(() {
+        print("Sensor not found, switching to simulation mode");
+        _toggleSimulationMode(true);
+      });
     }
   }
 
   void _toggleSimulationMode(bool value) {
     setState(() {
       _isSimulationMode = value;
-      _steps = 0; 
-      _updateSteps(0);
-      _setupPedometer();
+      _steps = 0;
+      _previousAnimationValue = 0.0;
+      _animationController.stop();
+      _animationController.reset();
+
+      if (value) {
+        _stepCountSubscription?.cancel();
+        _updateAnimationDuration();
+      } else {
+        initPedometer();
+      }
     });
   }
 
   void _startSimulation() {
-    _simulationTimer?.cancel();
-    
-    _simulationTimer = Timer.periodic(_getDurationPerStep(), (timer) {
-        _updateSteps(_steps + 1);
-    });
-
-    _animationController.duration = _getDurationPerStep();
-    if (!_animationController.isAnimating) {
-      _animationController.forward(); // Start the forward-reverse loop
+    if (_isSimulationMode && !_animationController.isAnimating) {
+      _animationController.repeat(reverse: true);
     }
   }
 
   void _stopSimulation() {
-    _simulationTimer?.cancel();
     if (_animationController.isAnimating) {
       _animationController.stop();
     }
   }
-
-  void _onSpeedChanged(double newSpeed) {
-    setState(() {
-      _simulationSpeed = newSpeed;
-    });
-    if (_isSimulationMode && (_simulationTimer?.isActive ?? false)) {
-        _startSimulation();
-    }
-  }
-
-  Duration _getDurationPerStep() {
-    final maxDuration = 1200;
-    final minDuration = 250;
-    final durationRange = maxDuration - minDuration;
-    final normalizedSpeed = (_simulationSpeed - 1) / 9;
-    final invertedDuration = maxDuration - (normalizedSpeed * durationRange);
-    return Duration(milliseconds: invertedDuration.toInt());
-  }
   
+  void _updateAnimationDuration() {
+      final durationMs = (1620 - (_simulationSpeed * 120)) / 2;
+      _animationController.duration = Duration(milliseconds: durationMs.toInt());
+      
+      if(_animationController.isAnimating) {
+        _animationController.repeat(reverse: true);
+      }
+  }
+
+  @override
+  void dispose() {
+    _stepCountSubscription?.cancel();
+    _animationController.removeListener(_onAnimationUpdate);
+    _animationController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    super.build(context);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pedometer App'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
-          if (_currentIndex == 0)
-            Row(
-              children: [
-                const Text('Sim Mode', style: TextStyle(fontSize: 12)),
-                Switch(
-                  value: _isSimulationMode,
-                  onChanged: _toggleSimulationMode,
-                  activeColor: Colors.orangeAccent,
+          Row(
+            children: [
+              const Text('Simulate'),
+              Switch(
+                value: _isSimulationMode,
+                onChanged: _toggleSimulationMode,
+              ),
+              const SizedBox(width: 10),
+            ],
+          ),
+        ],
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              const SizedBox(height: 20),
+              Text(
+                _isSimulationMode ? 'Simulation Mode' : 'Live Mode',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w500,
+                  color: _isSimulationMode ? Colors.orange : Colors.green,
                 ),
-              ],
-            ),
-          if (_currentIndex == 3)
-            IconButton(
-              icon: const Icon(Icons.logout),
-              tooltip: 'Logout',
-              onPressed: () => FirebaseAuth.instance.signOut(),
-            )
-        ],
-      ),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          StepTabPage(
-            steps: _steps,
-            isSimulationMode: _isSimulationMode,
-            simulationSpeed: _simulationSpeed,
-            animationController: _animationController,
-            onStart: _startSimulation,
-            onStop: _stopSimulation,
-            onSpeedChanged: _onSpeedChanged,
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                height: 250,
+                width: 200,
+                child: CustomPaint(
+                  size: const Size(200, 250),
+                  painter: DetailedWalkingPainter(animation: _animationController),
+                ),
+              ),
+              const SizedBox(height: 30),
+              const Text(
+                'Steps Taken',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w500),
+              ),
+              Text(
+                '$_steps',
+                style: const TextStyle(fontSize: 60, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 40),
+              if (_isSimulationMode)
+                _buildSimulationControls(),
+              const SizedBox(height: 20),
+            ],
           ),
-          const Center(child: Text('Statistics Page')),
-          const Center(child: Text('Events Page')),
-          const ProfileTabPage(),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(
-            label: 'Step',
-            icon: Icon(Icons.directions_walk),
-          ),
-          BottomNavigationBarItem(
-            label: 'Stats',
-            icon: Icon(Icons.bar_chart),
-          ),
-          BottomNavigationBarItem(
-            label: 'Events',
-            icon: Icon(Icons.event),
-          ),
-          BottomNavigationBarItem(
-            label: 'Profile',
-            icon: Icon(Icons.person),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  late Stream<StepCount> _stepCountStream;
+  Widget _buildSimulationControls() {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            ElevatedButton.icon(
+              icon: const Icon(Icons.play_arrow),
+              label: const Text('Start'),
+              onPressed: _startSimulation,
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green, 
+                  foregroundColor: Colors.white, 
+                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)),
+            ),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.stop),
+              label: const Text('Stop'),
+              onPressed: _stopSimulation,
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red, 
+                  foregroundColor: Colors.white, 
+                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('Slow'),
+              Expanded(
+                child: Slider(
+                  value: _simulationSpeed,
+                  min: 1,
+                  max: 10,
+                  divisions: 9,
+                  label: _simulationSpeed.round().toString(),
+                  onChanged: (newSpeed) {
+                    setState(() {
+                      _simulationSpeed = newSpeed;
+                      _updateAnimationDuration();
+                    });
+                  },
+                ),
+              ),
+              const Text('Fast'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }
