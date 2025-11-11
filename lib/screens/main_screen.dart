@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:pedometer/pedometer.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:myapp/widgets/detailed_walking_painter.dart';
 
 class MainScreen extends StatefulWidget {
@@ -21,11 +22,14 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
 
   bool _isSimulationMode = false;
   double _simulationSpeed = 5.0;
-  
+
   late AnimationController _animationController;
   double _previousAnimationValue = 0.0;
 
   StreamSubscription<StepCount>? _stepCountSubscription;
+  StreamSubscription<Position>? _positionSubscription;
+  Position? _lastPosition;
+  Timer? _movementStopTimer;
 
   @override
   void initState() {
@@ -35,8 +39,20 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 1020),
     );
     _animationController.addListener(_onAnimationUpdate);
-    initPedometer();
-    _startTimer(); // Timer is initialized but will only run when _isTimerActive is true
+    _startTimer();
+    _setupMode(isSimulation: _isSimulationMode);
+  }
+
+  void _setupMode({required bool isSimulation}) {
+    if (isSimulation) {
+      _stopPositionTracking();
+      _stepCountSubscription?.cancel();
+      _updateAnimationDuration();
+    } else {
+      _animationController.stop();
+      initPedometer();
+      _startPositionTracking();
+    }
   }
 
   void _startTimer() {
@@ -51,8 +67,8 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
 
   void _updateMetrics(int steps) {
     _steps = steps;
-    _distance = steps * 0.762; // Average stride length: 0.762 meters
-    _calories = steps * 0.04; // Average calories burned per step: 0.04
+    _distance = steps * 0.762; // Average stride length
+    _calories = steps * 0.04; // Average calories per step
   }
 
   void _onAnimationUpdate() {
@@ -60,7 +76,7 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     final currentValue = _animationController.value;
     if ((_previousAnimationValue < 0.5 && currentValue >= 0.5) ||
         (_previousAnimationValue > 0.5 && currentValue < 0.5)) {
-      setState(() { 
+      setState(() {
         _updateMetrics(_steps + 1);
       });
     }
@@ -68,18 +84,14 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
   }
 
   void initPedometer() {
-    if (_isSimulationMode) return;
     _stepCountSubscription = Pedometer.stepCountStream.listen(
-      _onStepCount, 
-      onError: _onStepCountError
+      _onStepCount,
+      onError: _onStepCountError,
     );
   }
-  
-  void _onStepCount(StepCount event) {
-    if (mounted && !_isTimerActive) {
-      setState(() { _isTimerActive = true; });
-    }
 
+  void _onStepCount(StepCount event) {
+    _handleMovement();
     if (!_animationController.isAnimating) {
       _animationController.repeat(reverse: true);
     }
@@ -98,6 +110,62 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     }
   }
 
+  void _startPositionTracking() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      print('Location services are disabled.');
+      return;
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        print('Location permissions are denied');
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      print('Location permissions are permanently denied, we cannot request permissions.');
+      return;
+    }
+
+    _positionSubscription = Geolocator.getPositionStream().listen((Position position) {
+      if (_lastPosition != null) {
+        final distance = Geolocator.distanceBetween(
+          _lastPosition!.latitude, _lastPosition!.longitude,
+          position.latitude, position.longitude
+        );
+        // If moved more than a meter, consider it as movement
+        if (distance > 1) {
+          _handleMovement();
+        }
+      }
+      _lastPosition = position;
+    });
+  }
+
+  void _stopPositionTracking() {
+    _positionSubscription?.cancel();
+    _movementStopTimer?.cancel();
+  }
+
+  void _handleMovement() {
+    if (mounted && !_isTimerActive) {
+      setState(() { _isTimerActive = true; });
+    }
+    _movementStopTimer?.cancel();
+    _movementStopTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted) {
+        setState(() { _isTimerActive = false; });
+      }
+    });
+  }
+
   void _toggleSimulationMode(bool value) {
     setState(() {
       _isSimulationMode = value;
@@ -107,13 +175,8 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
       _previousAnimationValue = 0.0;
       _animationController.stop();
       _animationController.reset();
-
-      if (value) {
-        _stepCountSubscription?.cancel();
-        _updateAnimationDuration();
-      } else {
-        initPedometer();
-      }
+      _movementStopTimer?.cancel();
+      _setupMode(isSimulation: value);
     });
   }
 
@@ -130,14 +193,13 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
       _animationController.stop();
     }
   }
-  
+
   void _updateAnimationDuration() {
-      final durationMs = (1620 - (_simulationSpeed * 120)) / 2;
-      _animationController.duration = Duration(milliseconds: durationMs.toInt());
-      
-      if(_animationController.isAnimating) {
-        _animationController.repeat(reverse: true);
-      }
+    final durationMs = (1620 - (_simulationSpeed * 120)) / 2;
+    _animationController.duration = Duration(milliseconds: durationMs.toInt());
+    if (_animationController.isAnimating) {
+      _animationController.repeat(reverse: true);
+    }
   }
 
   @override
@@ -146,9 +208,10 @@ class _MainScreenState extends State<MainScreen> with TickerProviderStateMixin {
     _animationController.removeListener(_onAnimationUpdate);
     _animationController.dispose();
     _timer?.cancel();
+    _stopPositionTracking();
     super.dispose();
   }
-
+  
   String _formatDuration(int totalSeconds) {
     final duration = Duration(seconds: totalSeconds);
     String twoDigits(int n) => n.toString().padLeft(2, "0");
