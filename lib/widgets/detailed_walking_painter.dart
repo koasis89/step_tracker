@@ -9,14 +9,19 @@ double lerp(double min, double max, double t) {
 
 class DetailedWalkingPainter extends CustomPainter {
   final Animation<double> animation;
+  final bool isDarkMode;
 
-  DetailedWalkingPainter({required this.animation}) : super(repaint: animation);
+  DetailedWalkingPainter({required this.animation, required this.isDarkMode}) : super(repaint: animation);
 
   @override
   void paint(Canvas canvas, Size size) {
+    // 테마에 따라 색상 결정
+    final bodyColor = isDarkMode ? const Color(0xFFFFFFFF) : const Color(0xFF000080);
+
     final paint = Paint()
       // 선 색상을 Colors.white로 변경
-      ..color = Colors.white
+      //..color = Colors.white
+      ..color = bodyColor
       ..strokeWidth = 4.0 
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -96,6 +101,6 @@ class DetailedWalkingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant DetailedWalkingPainter oldDelegate) {
-    return oldDelegate.animation != animation;
+    return oldDelegate.animation != animation || oldDelegate.isDarkMode != isDarkMode;
   }
 }

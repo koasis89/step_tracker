@@ -168,27 +168,21 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
               const SizedBox(height: 20),
-              Text(
-                'Live Mode',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.green,
-                ),
-              ),
-              const SizedBox(height: 20),
               SizedBox(
-                height: 250,
+                height: 200,
                 width: 200,
                 child: CustomPaint(
                   size: const Size(200, 250),
-                  painter: DetailedWalkingPainter(animation: _animationController),
+                  painter: DetailedWalkingPainter(
+                    animation: _animationController,
+                    isDarkMode: Theme.of(context).brightness == Brightness.dark,
+                  ),
                 ),
               ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 20),
               const Text(
                 'Steps Taken',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w500),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
               ),
               Text(
                 '$_steps',
