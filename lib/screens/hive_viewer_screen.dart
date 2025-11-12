@@ -43,6 +43,18 @@ class _HiveViewerScreenState extends State<HiveViewerScreen> {
             itemCount: records.length,
             itemBuilder: (context, index) {
               final record = records[index];
+              // 'yyyy-MM-dd-HH-mm' 형식의 키를 분리하여 표시
+              String displayDate = record.date;
+              try {
+                final parts = record.date.split('-');
+                if (parts.length >= 4) {
+                  displayDate = '날짜: ${parts[0]}-${parts[1]}-${parts[2]}  시간: ${parts[3]}:${parts.length > 4 ? parts[4] : '00'}';
+                }
+              } catch (e) {
+                // 포맷이 다른 경우 원본 데이터 표시
+                displayDate = '키: ${record.date}';
+              }
+
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: ListTile(
@@ -54,7 +66,7 @@ class _HiveViewerScreenState extends State<HiveViewerScreen> {
                     ),
                   ),
                   title: Text(
-                    '날짜: ${record.date}',
+                    displayDate,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   subtitle: Text(

@@ -5,6 +5,7 @@ import 'package:pedometer/pedometer.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:myapp/widgets/detailed_walking_painter.dart';
 import 'package:hive/hive.dart';
+import 'package:intl/intl.dart';
 import 'package:myapp/models/fitness_record.dart';
 
 class LiveScreen extends StatefulWidget {
@@ -46,7 +47,9 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   // 2. Hive에서 오늘 날짜의 데이터를 불러오는 함수
   void _loadInitialData() {
     final box = Hive.box<FitnessRecord>('fitness_records');
-    final dateKey = DateTime.now().toIso8601String().substring(0, 10);
+    final now = DateTime.now();
+    final minuteBlock = (now.minute ~/ 10) * 10;
+    final dateKey = DateFormat('yyyy-MM-dd-HH-').format(now) + minuteBlock.toString().padLeft(2, '0');
     final todayRecord = box.get(dateKey);
 
     if (todayRecord != null) {
@@ -73,8 +76,8 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     });
   }
 
-  // 15초마다 Hive에 데이터를 저장하는 타이머 설정
-  void _startDbSaveTimer() {
+  // 1. 1초마다 Hive에 데이터를 저장하는 타이머 설정
+  void _startDbSaveTimer() { 
     _dbSaveTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
       if (mounted && _isTimerActive) {
         _saveRecordToHive();
@@ -85,18 +88,42 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
   void _saveRecordToHive() {
     final box = Hive.box<FitnessRecord>('fitness_records');
     final now = DateTime.now();
-    final dateKey = now.toIso8601String().substring(0, 10); // 'YYYY-MM-DD'
+
+    // 2. 10분 단위로 키를 생성 (예: 14:00 ~ 14:09 -> ...-14-00, 14:10 ~ 14:19 -> ...-14-10)
+    final currentMinuteBlock = (now.minute ~/ 10) * 10;
+    final currentKey = DateFormat('yyyy-MM-dd-HH-').format(now) + currentMinuteBlock.toString().padLeft(2, '0');
+
+    // 3. 이전 10분 블록의 키를 계산
+    final tenMinutesAgo = now.subtract(const Duration(minutes: 10));
+    final previousMinuteBlock = (tenMinutesAgo.minute ~/ 10) * 10;
+    final previousKey = DateFormat('yyyy-MM-dd-HH-').format(tenMinutesAgo) + previousMinuteBlock.toString().padLeft(2, '0');
+
+    // 4. 이전 블록의 데이터를 가져옴
+    final previousRecord = box.get(previousKey);
+
+    // 5. 현재 블록의 순수 활동량 계산 (델타 값)
+    final currentSteps = _steps - (previousRecord?.steps ?? 0);
+    final currentDistance = _distance - (previousRecord?.distance ?? 0.0);
+    final currentDuration = _elapsedSeconds - (previousRecord?.duration ?? 0);
+    final currentCalories = _calories - (previousRecord?.calories ?? 0.0);
 
     final record = FitnessRecord()
-      ..date = dateKey
+      ..date = currentKey
+      ..steps = currentSteps > 0 ? currentSteps : 0
+      ..distance = currentDistance > 0 ? currentDistance : 0.0
+      ..duration = currentDuration > 0 ? currentDuration : 0
+      ..calories = currentCalories > 0 ? currentCalories : 0.0;
+
+    // 6. 현재 누적 데이터를 저장 (다음 계산을 위해)
+    final totalRecord = FitnessRecord()
+      ..date = currentKey
       ..steps = _steps
-      ..calories = _calories
       ..distance = _distance
       ..duration = _elapsedSeconds
       ..calories = _calories;
 
-    box.put(dateKey, record);
-    print('$dateKey: Live data saved to Hive. Steps: $_steps');
+    box.put(currentKey, totalRecord);
+    print('Saved total data for key: $currentKey. Steps: $_steps');
   }
 
   void _updateMetrics(int steps) {
@@ -179,6 +206,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     _movementStopTimer = Timer(const Duration(seconds: 5), () {
       if (mounted) {
         setState(() { _isTimerActive = false; });
+        _saveRecordToHive(); // 5초간 움직임이 없어 타이머가 멈출 때 저장
       }
     });
   }
