@@ -107,23 +107,26 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
     final currentDuration = _elapsedSeconds - (previousRecord?.duration ?? 0);
     final currentCalories = _calories - (previousRecord?.calories ?? 0.0);
 
-    final record = FitnessRecord()
+    // 6. 순수 활동량(델타)을 저장할 레코드 생성
+    final deltaRecord = FitnessRecord()
       ..date = currentKey
       ..steps = currentSteps > 0 ? currentSteps : 0
       ..distance = currentDistance > 0 ? currentDistance : 0.0
       ..duration = currentDuration > 0 ? currentDuration : 0
       ..calories = currentCalories > 0 ? currentCalories : 0.0;
 
-    // 6. 현재 누적 데이터를 저장 (다음 계산을 위해)
+    // 7. 현재 누적 데이터를 저장할 레코드 생성 (다음 계산을 위해)
     final totalRecord = FitnessRecord()
       ..date = currentKey
       ..steps = _steps
       ..distance = _distance
       ..duration = _elapsedSeconds
       ..calories = _calories;
-
-    box.put(currentKey, totalRecord);
-    print('Saved total data for key: $currentKey. Steps: $_steps');
+    
+    // 8. 두 종류의 데이터를 별개의 키로 저장
+    box.put(currentKey + "_total", totalRecord); // 계산용 누적 데이터
+    box.put(currentKey, deltaRecord); // 분석용 순수 활동량 데이터
+    print('Saved delta data for key: $currentKey. Steps: ${deltaRecord.steps}');
   }
 
   void _updateMetrics(int steps) {

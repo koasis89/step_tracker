@@ -53,7 +53,7 @@ class _SimulationScreenState extends State<SimulationScreen> with TickerProvider
     // 10분 단위로 키를 생성하여 로드
     final minuteBlock = (_simulationDateTime.minute ~/ 10) * 10;
     final dateKey = DateFormat('yyyy-MM-dd-HH-').format(_simulationDateTime) + minuteBlock.toString().padLeft(2, '0');
-    final todayRecord = box.get(dateKey);
+    final todayRecord = box.get(dateKey + "_total"); // '_total' 키로 총 누적 데이터를 불러옴
 
     if (todayRecord != null) {
       _steps = todayRecord.steps;
@@ -67,9 +67,7 @@ class _SimulationScreenState extends State<SimulationScreen> with TickerProvider
   void _startTimer() {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted && _isTimerActive) {
-        setState(() {
-          _elapsedSeconds++;
-        });
+        setState(() => _elapsedSeconds += _acceleration);
       }
     });
   }
@@ -95,7 +93,7 @@ class _SimulationScreenState extends State<SimulationScreen> with TickerProvider
     final previousKey = DateFormat('yyyy-MM-dd-HH-').format(tenMinutesAgo) + previousMinuteBlock.toString().padLeft(2, '0');
 
     // 이전 블록의 데이터를 가져옴
-    final previousRecord = box.get(previousKey);
+    final previousRecord = box.get(previousKey + "_total"); // '_total' 키로 이전 블록의 총 누적 데이터를 가져옴
 
     // 현재 블록의 순수 활동량 계산 (델타 값)
     final currentSteps = _steps - (previousRecord?.steps ?? 0);
@@ -110,7 +108,8 @@ class _SimulationScreenState extends State<SimulationScreen> with TickerProvider
     _currentLatitude += latOffset;
     _currentLongitude += lngOffset;
     
-    final record = FitnessRecord()
+    // 순수 활동량(델타)을 저장할 레코드 생성
+    final deltaRecord = FitnessRecord()
       ..date = currentKey
       ..steps = currentSteps > 0 ? currentSteps : 0
       ..distance = currentDistance > 0 ? currentDistance : 0.0
@@ -119,15 +118,18 @@ class _SimulationScreenState extends State<SimulationScreen> with TickerProvider
       ..longitude = _currentLongitude
       ..calories = currentCalories > 0 ? currentCalories : 0.0;
 
-    // 현재 누적 데이터를 저장 (다음 계산을 위해)
+    // 현재 누적 데이터를 저장할 레코드 생성 (다음 계산을 위해)
     final totalRecord = FitnessRecord()
       ..date = currentKey
       ..steps = _steps
       ..distance = _distance
       ..duration = _elapsedSeconds
       ..calories = _calories;
-    box.put(currentKey, totalRecord);
-    print('Saved total data for key: $currentKey. Steps: $_steps');
+
+    // 두 종류의 데이터를 별개의 키로 저장
+    box.put(currentKey + "_total", totalRecord); // 계산용 누적 데이터
+    box.put(currentKey, deltaRecord); // 분석용 순수 활동량 데이터
+    print('Saved delta data for key: $currentKey. Steps: ${deltaRecord.steps}, Total Steps: ${totalRecord.steps}');
   }
 
   void _updateMetrics(int steps) {
@@ -142,7 +144,11 @@ class _SimulationScreenState extends State<SimulationScreen> with TickerProvider
     if ((_previousAnimationValue < 0.5 && currentValue >= 0.5) ||
         (_previousAnimationValue > 0.5 && currentValue < 0.5)) {
       setState(() { 
-        _updateMetrics(_steps + (1 * _acceleration)); // 3. 걸음 수에 배율 적용
+        // 배율이 적용된 증가량 계산
+        final stepIncrement = 1 * _acceleration;
+        _steps += stepIncrement;
+        _distance += stepIncrement * 0.762; // 걸음 증가량만큼 거리 추가
+        _calories += stepIncrement * 0.04;  // 걸음 증가량만큼 칼로리 추가
       });
     }
     _previousAnimationValue = currentValue;
@@ -286,9 +292,9 @@ class _SimulationScreenState extends State<SimulationScreen> with TickerProvider
               _buildStatsRow(),
               const SizedBox(height: 40),
               _buildSimulationControls(),
-              const SizedBox(height: 20),
+              const SizedBox(height: 10), // 간격 줄이기
               _buildTestControls(), // 5. 테스트용 컨트롤 UI 추가
-              const SizedBox(height: 20),
+              const SizedBox(height: 10), // 간격 줄이기
             ],
           ),
         ),
@@ -411,38 +417,42 @@ class _SimulationScreenState extends State<SimulationScreen> with TickerProvider
             ),
             const SizedBox(height: 10),
             // 시간 조정 버튼들
-            _buildTimeAdjusterRow('분 (Minute)', 1),
-            _buildTimeAdjusterRow('시 (Hour)', 60),
-            _buildTimeAdjusterRow('일 (Day)', 60 * 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildTimeAdjusterColumn('일', 60 * 24),
+                _buildTimeAdjusterColumn('시', 60),
+                _buildTimeAdjusterColumn('분', 1),
+              ],
+            )
           ],
         ),
       ),
     );
   }
 
-  // 시간 단위를 조정하는 버튼 행을 만드는 헬퍼 위젯
-  Widget _buildTimeAdjusterRow(String label, int minutesToAdd) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  // 시간 단위를 조정하는 버튼 열을 만드는 헬퍼 위젯
+  Widget _buildTimeAdjusterColumn(String label, int minutesToAdd) {
+    return Column(
       children: [
         Text(label),
-        Row(
-          children: [
-            IconButton(
-              icon: const Icon(Icons.remove_circle_outline),
-              onPressed: () {
-                setState(() => _simulationDateTime = _simulationDateTime.subtract(Duration(minutes: minutesToAdd)));
-                _loadInitialData();
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.add_circle_outline),
-              onPressed: () {
-                setState(() => _simulationDateTime = _simulationDateTime.add(Duration(minutes: minutesToAdd)));
-                _loadInitialData();
-              },
-            ),
-          ],
+        IconButton(
+          icon: const Icon(Icons.add_circle_outline),
+          iconSize: 30,
+          onPressed: () {
+            setState(() => _simulationDateTime = _simulationDateTime.add(Duration(minutes: minutesToAdd)));
+            _loadInitialData();
+          },
+          padding: EdgeInsets.zero,
+        ),
+        IconButton(
+          icon: const Icon(Icons.remove_circle_outline),
+          iconSize: 30,
+          onPressed: () {
+            setState(() => _simulationDateTime = _simulationDateTime.subtract(Duration(minutes: minutesToAdd)));
+            _loadInitialData();
+          },
+          padding: EdgeInsets.zero,
         ),
       ],
     );
