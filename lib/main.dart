@@ -4,6 +4,9 @@ import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:myapp/screens/main_screen.dart';
 import 'firebase_options.dart'; // flutterfire configure가 생성한 파일
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:myapp/models/fitness_record.dart';
+
 
 class AppModeProvider with ChangeNotifier {
   bool _isSimulationMode = true;
@@ -33,6 +36,13 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Hive 초기화
+  await Hive.initFlutter();
+  // Adapter 등록
+  Hive.registerAdapter(FitnessRecordAdapter());
+  // 'fitness_records'라는 이름의 Box를 연다.
+  await Hive.openBox<FitnessRecord>('fitness_records');
   
   // 2. MultiProvider를 사용하여 여러 Provider를 앱에 제공
   runApp(

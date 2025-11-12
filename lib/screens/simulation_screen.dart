@@ -1,6 +1,10 @@
 
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:hive/hive.dart';
+import 'package:myapp/models/fitness_record.dart';
 import 'package:myapp/widgets/detailed_walking_painter.dart';
 
 class SimulationScreen extends StatefulWidget {
@@ -16,6 +20,9 @@ class _SimulationScreenState extends State<SimulationScreen> with TickerProvider
   double _calories = 0.0;
   int _elapsedSeconds = 0;
   Timer? _timer;
+  Timer? _dbSaveTimer; // DB 저장을 위한 타이머
+  double _currentLatitude = 37.7749; // 기본 위도
+  double _currentLongitude = -122.4194; // 기본 경도
   bool _isTimerActive = false;
 
   double _simulationSpeed = 5.0;
@@ -26,13 +33,30 @@ class _SimulationScreenState extends State<SimulationScreen> with TickerProvider
   @override
   void initState() {
     super.initState();
+    _loadInitialData(); // 1. 데이터 로딩 함수 호출
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1020),
     );
     _animationController.addListener(_onAnimationUpdate);
     _startTimer();
+    _startDbSaveTimer(); // DB 저장 타이머 시작
     _updateAnimationDuration(); 
+  }
+
+  // 2. Hive에서 오늘 날짜의 데이터를 불러오는 함수
+  void _loadInitialData() {
+    final box = Hive.box<FitnessRecord>('fitness_records');
+    final dateKey = DateTime.now().toIso8601String().substring(0, 10);
+    final todayRecord = box.get(dateKey);
+
+    if (todayRecord != null) {
+      _steps = todayRecord.steps;
+      _distance = todayRecord.distance;
+      _calories = todayRecord.calories;
+      _elapsedSeconds = todayRecord.duration;
+      print('Loaded data for $dateKey: Steps: $_steps');
+    }
   }
 
   void _startTimer() {
@@ -43,6 +67,39 @@ class _SimulationScreenState extends State<SimulationScreen> with TickerProvider
         });
       }
     });
+  }
+
+  // 15초마다 Hive에 데이터를 저장하는 타이머 설정
+  void _startDbSaveTimer() {
+    _dbSaveTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
+      if (mounted && _isTimerActive) {
+        _saveRecordToHive();
+      }
+    });
+  }
+
+  void _saveRecordToHive() {
+    final box = Hive.box<FitnessRecord>('fitness_records');
+    final dateKey = DateTime.now().toIso8601String().substring(0, 10); // 'YYYY-MM-DD'
+    final random = Random();
+
+    // 시뮬레이션 모드에서 GPS 데이터 랜덤 이동
+    final latOffset = random.nextDouble() * 0.00005 - 0.000025; // -2.5m ~ 2.5m
+    final lngOffset = random.nextDouble() * 0.00005 - 0.000025;
+    _currentLatitude += latOffset;
+    _currentLongitude += lngOffset;
+
+    final record = FitnessRecord()
+      ..date = dateKey
+      ..steps = _steps
+      ..distance = _distance
+      ..duration = _elapsedSeconds
+      ..latitude = _currentLatitude
+      ..longitude = _currentLongitude
+      ..calories = _calories;
+
+    box.put(dateKey, record);
+    print('$dateKey: Simulation data saved to Hive. Steps: $_steps');
   }
 
   void _updateMetrics(int steps) {
@@ -104,6 +161,8 @@ class _SimulationScreenState extends State<SimulationScreen> with TickerProvider
     _animationController.removeListener(_onAnimationUpdate);
     _animationController.dispose();
     _timer?.cancel();
+    _dbSaveTimer?.cancel(); // DB 저장 타이머 취소
+    _saveRecordToHive(); // 화면을 나가기 직전에 마지막으로 한 번 더 저장
     super.dispose();
   }
 
