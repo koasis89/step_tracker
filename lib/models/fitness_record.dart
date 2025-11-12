@@ -33,4 +33,17 @@ class FitnessRecord extends HiveObject {
   FitnessRecord() {
     isSynced = false; // 기본값은 동기화 안됨
   }
+
+  // Firestore에 업로드하기 위해 객체를 Map으로 변환하는 메소드
+  Map<String, dynamic> toMap() {
+    return {
+      'date': date,
+      'steps': steps,
+      'distance': distance,
+      'duration': duration,
+      'calories': calories,
+      'latitude': latitude,
+      'longitude': longitude,
+    };
+  }
 }
