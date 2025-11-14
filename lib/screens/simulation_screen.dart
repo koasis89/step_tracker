@@ -1,12 +1,12 @@
-
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart'; // 날짜 포맷을 위해 추가
 import 'package:geolocator/geolocator.dart';
 import 'package:hive/hive.dart';
+import 'package:lottie/lottie.dart';
 import 'package:myapp/models/fitness_record.dart';
-import 'package:myapp/widgets/detailed_walking_painter.dart';
+import 'package:myapp/widgets/flying_object_animation.dart';
 
 class SimulationScreen extends StatefulWidget {
   const SimulationScreen({super.key});
@@ -39,7 +39,7 @@ class _SimulationScreenState extends State<SimulationScreen> with TickerProvider
     _loadInitialData(); // 1. 데이터 로딩 함수 호출
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1020),
+      duration: const Duration(milliseconds: 1020), // Lottie 애니메이션의 기본 재생 시간
     );
     _animationController.addListener(_onAnimationUpdate);
     _startTimer();
@@ -170,12 +170,16 @@ class _SimulationScreenState extends State<SimulationScreen> with TickerProvider
   }
   
   void _updateAnimationDuration() {
-      final durationMs = (1620 - (_simulationSpeed * 120)) / 2;
-      _animationController.duration = Duration(milliseconds: durationMs.toInt());
-      
-      if(_animationController.isAnimating) {
-        _animationController.repeat(reverse: true);
-      }
+    // _simulationSpeed (1.0 ~ 10.0)에 따라 Lottie 애니메이션의 재생 속도를 조절합니다.
+    // 예를 들어, _simulationSpeed 1일 때 2040ms, 10일 때 204ms로 duration을 설정합니다.
+    final baseDuration = 1020; // Lottie 애니메이션의 기본 duration
+    final newDuration = (baseDuration * 2 / _simulationSpeed).round();
+    _animationController.duration = Duration(milliseconds: newDuration);
+
+    // 애니메이션이 이미 재생 중이라면, 변경된 duration으로 다시 시작합니다.
+    if (_animationController.isAnimating) {
+      _animationController.repeat(reverse: true);
+    }
   }
 
   void _resetSimulation() {
@@ -271,12 +275,15 @@ class _SimulationScreenState extends State<SimulationScreen> with TickerProvider
               SizedBox(
                 height: 200,
                 width: 200,
-                child: CustomPaint(
-                  size: const Size(200, 250),
-                  painter: DetailedWalkingPainter(
-                    animation: _animationController,
-                    isDarkMode: Theme.of(context).brightness == Brightness.dark,
-                  ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    const FlyingObjectAnimation(), // Positioned.fill 제거
+                    Lottie.asset(
+                      'lottie/walking.json', // 올바른 에셋 경로로 수정
+                      controller: _animationController
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 20),
@@ -304,23 +311,30 @@ class _SimulationScreenState extends State<SimulationScreen> with TickerProvider
 
   Widget _buildStatsRow() {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _buildStatItem(Icons.location_on, (_distance / 1000).toStringAsFixed(2), 'km'),
-        _buildStatItem(Icons.timer, _formatDuration(_elapsedSeconds), 'Time'),
-        _buildStatItem(Icons.local_fire_department, _calories.toStringAsFixed(1), 'kcal'),
+        Expanded(child: _buildStatItem(Icons.location_on, (_distance / 1000).toStringAsFixed(2), 'km')),
+        const SizedBox(width: 12),
+        Expanded(child: _buildStatItem(Icons.timer, _formatDuration(_elapsedSeconds), 'Time')),
+        const SizedBox(width: 12),
+        Expanded(child: _buildStatItem(Icons.local_fire_department, _calories.toStringAsFixed(1), 'kcal')),
       ],
     );
   }
 
   Widget _buildStatItem(IconData icon, String value, String unit) {
-    return Column(
-      children: [
-        Icon(icon, color: Theme.of(context).primaryColor, size: 30),
-        const SizedBox(height: 8),
-        Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-        Text(unit, style: const TextStyle(fontSize: 14, color: Colors.grey)),
-      ],
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16.0),
+        child: Column(
+          children: [
+            Icon(icon, color: Theme.of(context).colorScheme.primary, size: 30),
+            const SizedBox(height: 8),
+            Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            Text(unit, style: Theme.of(context).textTheme.bodyMedium),
+          ],
+        ),
+      ),
     );
   }
 
@@ -405,7 +419,7 @@ class _SimulationScreenState extends State<SimulationScreen> with TickerProvider
   // 6. 날짜/시간 및 가속도 조절을 위한 위젯
   Widget _buildTestControls() {
     return Card(
-      elevation: 2,
+      elevation: 1,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -413,7 +427,7 @@ class _SimulationScreenState extends State<SimulationScreen> with TickerProvider
             // 현재 시뮬레이션 시간 표시
             Text(
               DateFormat('yyyy-MM-dd HH:mm').format(_simulationDateTime),
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, letterSpacing: 1.2),
             ),
             const SizedBox(height: 10),
             // 시간 조정 버튼들
@@ -435,24 +449,22 @@ class _SimulationScreenState extends State<SimulationScreen> with TickerProvider
   Widget _buildTimeAdjusterColumn(String label, int minutesToAdd) {
     return Column(
       children: [
-        Text(label),
-        IconButton(
-          icon: const Icon(Icons.add_circle_outline),
-          iconSize: 30,
+        Text(label, style: Theme.of(context).textTheme.labelMedium),
+        const SizedBox(height: 4),
+        FilledButton.tonal(
           onPressed: () {
             setState(() => _simulationDateTime = _simulationDateTime.add(Duration(minutes: minutesToAdd)));
             _loadInitialData();
           },
-          padding: EdgeInsets.zero,
+          child: const Icon(Icons.add),
         ),
-        IconButton(
-          icon: const Icon(Icons.remove_circle_outline),
-          iconSize: 30,
+        const SizedBox(height: 4),
+        FilledButton.tonal(
           onPressed: () {
             setState(() => _simulationDateTime = _simulationDateTime.subtract(Duration(minutes: minutesToAdd)));
             _loadInitialData();
           },
-          padding: EdgeInsets.zero,
+          child: const Icon(Icons.remove),
         ),
       ],
     );

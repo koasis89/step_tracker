@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:pedometer/pedometer.dart';
@@ -7,6 +6,8 @@ import 'package:myapp/widgets/detailed_walking_painter.dart';
 import 'package:hive/hive.dart';
 import 'package:intl/intl.dart';
 import 'package:myapp/models/fitness_record.dart';
+import 'package:lottie/lottie.dart';
+
 
 class LiveScreen extends StatefulWidget {
   const LiveScreen({super.key});
@@ -250,12 +251,15 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
               SizedBox(
                 height: 200,
                 width: 200,
-                child: CustomPaint(
-                  size: const Size(200, 250),
-                  painter: DetailedWalkingPainter(
-                    animation: _animationController,
-                    isDarkMode: Theme.of(context).brightness == Brightness.dark,
-                  ),
+                child: Lottie.asset(
+                  'lottie/walking.json',
+                  controller: _animationController,
+                  onLoaded: (composition) {
+                    _animationController.duration = composition.duration;
+                  },
+                  frameRate: FrameRate.max,
+                  repeat: true,
+                  reverse: true,
                 ),
               ),
               const SizedBox(height: 20),
@@ -279,23 +283,30 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
 
   Widget _buildStatsRow() {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _buildStatItem(Icons.location_on, (_distance / 1000).toStringAsFixed(2), 'km'),
-        _buildStatItem(Icons.timer, _formatDuration(_elapsedSeconds), 'Time'),
-        _buildStatItem(Icons.local_fire_department, _calories.toStringAsFixed(1), 'kcal'),
+        Expanded(child: _buildStatItem(Icons.location_on, (_distance / 1000).toStringAsFixed(2), 'km')),
+        const SizedBox(width: 12),
+        Expanded(child: _buildStatItem(Icons.timer, _formatDuration(_elapsedSeconds), 'Time')),
+        const SizedBox(width: 12),
+        Expanded(child: _buildStatItem(Icons.local_fire_department, _calories.toStringAsFixed(1), 'kcal')),
       ],
     );
   }
 
   Widget _buildStatItem(IconData icon, String value, String unit) {
-    return Column(
-      children: [
-        Icon(icon, color: Theme.of(context).primaryColor, size: 30),
-        const SizedBox(height: 8),
-        Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-        Text(unit, style: const TextStyle(fontSize: 14, color: Colors.grey)),
-      ],
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16.0),
+        child: Column(
+          children: [
+            Icon(icon, color: Theme.of(context).colorScheme.primary, size: 30),
+            const SizedBox(height: 8),
+            Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            Text(unit, style: Theme.of(context).textTheme.bodyMedium),
+          ],
+        ),
+      ),
     );
   }
 }
