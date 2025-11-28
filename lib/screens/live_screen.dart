@@ -252,7 +252,7 @@ class _LiveScreenState extends State<LiveScreen> with TickerProviderStateMixin {
                 height: 200,
                 width: 200,
                 child: Lottie.asset(
-                  'lottie/walking.json',
+                  'assets/lottie/walking.json',
                   controller: _animationController,
                   onLoaded: (composition) {
                     _animationController.duration = composition.duration;

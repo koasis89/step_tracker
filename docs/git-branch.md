@@ -69,7 +69,9 @@ git push origin seperate_live_sim
 
 이제 로컬 PC의 터미널에서 다음 명령어들을 순서대로 실행하여 원격 저장소에 업로드된 작업 내용을 가져옵니다.
 
+
 ### 4-1. 원격 저장소의 최신 정보 업데이트
+VSCode에서는 github clone해서 해당 리파지토리 선택해서 가져오면 됩니다.
 
 원격 저장소에 새로 추가된 브랜치나 커밋 등의 최신 정보를 로컬 Git 저장소로 가져옵니다.
 
@@ -84,4 +86,12 @@ git fetch
 ```bash
 git checkout seperate_live_sim
 ```
+### 4-3. 현재 git 상태 표시
 
+```bash
+git status
+```
+### 4-4. commit, push등 코드 업데이트 로그 기록
+```bash
+git log
+```
